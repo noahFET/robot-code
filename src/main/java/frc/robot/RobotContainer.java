@@ -17,7 +17,9 @@ import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
 import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 
 import frc.robot.generated.TunerConstants;
+import frc.robot.questOdometry.QuestServer;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
+import frc.robot.subsystems.QuestTelemetry;
 import frc.robot.subsystems.Shooter;
 
 public class RobotContainer {
@@ -38,7 +40,13 @@ public class RobotContainer {
 
     public final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();
 
-    public final Shooter shooter = new Shooter();
+    private final Shooter shooter = new Shooter();
+    
+
+    // quest stuff
+    private final QuestServer questServer = new QuestServer();
+    private final QuestTelemetry questTem = new QuestTelemetry(questServer);
+    
 
     public RobotContainer() {
         configureBindings();
