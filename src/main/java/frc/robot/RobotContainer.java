@@ -44,7 +44,7 @@ public class RobotContainer {
     
 
     // quest stuff
-    private final QuestServer questServer = new QuestServer();
+    private final QuestServer questServer = new QuestServer(drivetrain);
     private final QuestTelemetry questTem = new QuestTelemetry(questServer);
     
 
