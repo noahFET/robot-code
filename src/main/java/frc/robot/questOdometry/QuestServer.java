@@ -107,13 +107,34 @@ public class QuestServer {
 
 
     double[] goodCVPoseArr = new double[3];
-    Rotation2d rotBy;
+    double[] rotPosArr = new double[2];
+    double rotBy;
 
     void recieveData(DatagramPacket recPacket){
         boolean recSuccess;
         Optional<Pose2d> tempHistoryPoseOptional;
         Pose2d tempHistoryPose;
+        Pose2d rotatedOffsetQuestPose;
+        Pose2d rotatedCVOffsetPose;
+        fusedPosePose2dOrSmth = new Pose2d();
         while(recieveData){
+
+            questTime = 0;
+            transLag = 0;
+            cameraLag = 0;
+            slamPoseArr[0] = 0;
+            slamPoseArr[1] = 0;
+            slamPoseArr[2] = 0;
+            cvPoseArr[0] = 0;
+            cvPoseArr[1] = 0;
+            cvPoseArr[2] = 0;
+            cvData = false;
+            tagCount = 0;
+            recSuccess = false;
+            reprojError = 0;
+            recBB.position(0);
+            
+
             try{
                 socket.receive(recPacket);
                 recSuccess = true;
@@ -134,6 +155,12 @@ public class QuestServer {
                 slamPoseArr[0] = (double)recBB.getFloat();
                 slamPoseArr[2] = -Math.toRadians((double)recBB.getFloat());
 
+                rotatedOffsetQuestPose = new Pose2d(QuestConstants.questPosOnRobotX,QuestConstants.questPosOnRobotY,new Rotation2d()).rotateBy(new Rotation2d(slamPoseArr[2]));
+
+                slamPoseArr[0] += rotatedOffsetQuestPose.getX();
+                slamPoseArr[1] += rotatedOffsetQuestPose.getY();
+                slamPoseArr[2] += QuestConstants.questYawOnRobot;
+
                 slamPose = new Pose2d(slamPoseArr[0],slamPoseArr[1],new Rotation2d(slamPoseArr[2]));
 
                 //slamPose = new Pose2d((double)recBB.getFloat(),(double)recBB.getFloat(),new Rotation2d((double)Math.toRadians(recBB.getFloat())));
@@ -150,6 +177,14 @@ public class QuestServer {
                     cvPoseArr[0] = (double)recBB.getFloat();
                     cvPoseArr[2] = -Math.toRadians((double)recBB.getFloat());
 
+                    rotatedCVOffsetPose = new Pose2d(QuestConstants.questPosOnRobotX+QuestConstants.camPosOnQuestX,QuestConstants.questPosOnRobotY+QuestConstants.camPosOnQuestY,new Rotation2d()).rotateBy(new Rotation2d(cvPoseArr[2]+QuestConstants.questYawOnRobot));
+                    
+                    cvPoseArr[0] += rotatedCVOffsetPose.getX();
+                    cvPoseArr[1] += rotatedCVOffsetPose.getY();
+                    cvPoseArr[2] += QuestConstants.questYawOnRobot;
+
+                    //fusedPosePose2dOrSmth = new Pose2d(cvPoseArr[0],cvPoseArr[1], new Rotation2d(cvPoseArr[2]));
+
                     //cvPose = new Pose2d((double)recBB.getFloat(),(double)recBB.getFloat(),new Rotation2d((double)Math.toRadians(recBB.getFloat())));
 
 
@@ -160,23 +195,27 @@ public class QuestServer {
                         if(tempHistoryPoseOptional.isPresent()){
                             tempHistoryPose = tempHistoryPoseOptional.get();
                             
-                            slamOffset = new Pose2d(tempHistoryPose.getX(),tempHistoryPose.getY(),new Rotation2d(tempHistoryPose.getRotation().getRadians()));
-                            rotBy = new Rotation2d(cvPoseArr[2]-tempHistoryPose.getRotation().getRadians());
+                            slamOffset = tempHistoryPose;//new Pose2d(tempHistoryPose.getX(),tempHistoryPose.getY(),new Rotation2d(tempHistoryPose.getRotation().getRadians()));
+                            rotBy = cvPoseArr[2]-tempHistoryPose.getRotation().getRadians();
                             goodCVPoseArr = cvPoseArr;
+                            goodCVPose = new Pose2d(goodCVPoseArr[0]+0.381,goodCVPoseArr[1],new Rotation2d(goodCVPoseArr[2]));
                         }
                     }
 
                 }
-            }
 
-            if(slamPose!=null&&slamOffset!=null){
-                //rotatedSlamPose = new Pose2d(slamPoseArr[0]-slamOffset.getX(),slamPoseArr[1]-slamOffset.getX(),new Rotation2d(slamPoseArr[2]-slamOffset.getRotation().getRadians())).rotateBy(new Rotation2d((slamPoseArr[2]-slamOffset.getRotation().getRadians())+goodCVPoseArr[2]));
-                rotatedSlamPose = new Pose2d(slamPoseArr[0]-slamOffset.getX(),slamPoseArr[1]-slamOffset.getY(),new Rotation2d()).rotateBy(rotBy);
-                fusedPose = new Pose2d(rotatedSlamPose.getX()+goodCVPoseArr[0], rotatedSlamPose.getY()+goodCVPoseArr[1], new Rotation2d((slamPoseArr[2]-slamOffset.getRotation().getRadians())+goodCVPoseArr[2]));
-                csd.addVisionMeasurement(fusedPose, questTime);
+                if(slamPoseArr!=null&&slamOffset!=null){
+                    //rotatedSlamPose = new Pose2d(slamPoseArr[0]-slamOffset.getX(),slamPoseArr[1]-slamOffset.getX(),new Rotation2d(slamPoseArr[2]-slamOffset.getRotation().getRadians())).rotateBy(new Rotation2d((slamPoseArr[2]-slamOffset.getRotation().getRadians())+goodCVPoseArr[2]));
+                    rotatedSlamPose = new Pose2d(slamPoseArr[0]-slamOffset.getX(),slamPoseArr[1]-slamOffset.getY(),new Rotation2d()).rotateBy(new Rotation2d(rotBy));
+                    //rotPosArr = MathUtils.rotateVector2(slamPoseArr[0]-slamOffset.getX(), slamPoseArr[1]-slamOffset.getY(), rotBy);
+                    fusedPose = new Pose2d(rotatedSlamPose.getX()+goodCVPose.getX(), rotatedSlamPose.getY()+goodCVPose.getY(), new Rotation2d((slamPoseArr[2]-slamOffset.getRotation().getRadians())+goodCVPose.getRotation().getRadians()));
+                    fusedPosePose2dOrSmth = fusedPose;
+
+                    // add ts to the SwerveDrivePoseEstimator
+                    csd.addVisionMeasurement(fusedPose, questTime);
+                }
             }
             //fusedPose = new Pose2d(slamPose.getX(), slamPose.getY(), new Rotation2d(slamPose.getRotation().getRadians()));
-            recBB.position(0);
         }
     }
 
@@ -260,13 +299,17 @@ public class QuestServer {
             }
         }
     }
+
+    Pose2d goodCVPose;
+    Pose2d fusedPosePose2dOrSmth;
     
     public Pose2d getSlamPose(){
-        return slamPose;
+        return fusedPosePose2dOrSmth;
     }
 
     public Pose2d getCVPose(){
-        return new Pose2d(cvPoseArr[0],cvPoseArr[1],new Rotation2d(cvPoseArr[2]));
+       // return new Pose2d(goodCVPoseArr[0],goodCVPoseArr[1],new Rotation2d(goodCVPoseArr[2]));
+       return goodCVPose;
     }
 
     public double getQuestTime(){
@@ -278,7 +321,7 @@ public class QuestServer {
     }
 
     public Pose2d getFusedPose(){
-        return fusedPose;
+        return csd.getState().Pose;
     }
 
 }

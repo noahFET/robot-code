@@ -5,7 +5,12 @@
 package frc.robot;
 
 import com.ctre.phoenix6.HootAutoReplay;
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.path.PathConstraints;
+import com.pathplanner.lib.pathfinding.LocalADStar;
+import com.pathplanner.lib.pathfinding.Pathfinding;
 
+import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
@@ -22,6 +27,8 @@ public class Robot extends TimedRobot {
 
     public Robot() {
         m_robotContainer = new RobotContainer();
+        Pathfinding.setPathfinder(new LocalADStar());
+        AutoBuilder.pathfindToPose(new Pose2d(), new PathConstraints(1, 1, 1, 1), 0).schedule();
     }
 
     @Override

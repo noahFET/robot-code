@@ -8,9 +8,17 @@ import static edu.wpi.first.units.Units.*;
 
 import com.ctre.phoenix6.swerve.SwerveModule.DriveRequestType;
 import com.ctre.phoenix6.swerve.SwerveRequest;
+import com.pathplanner.lib.auto.AutoBuilder;
+import com.pathplanner.lib.commands.FollowPathCommand;
 
+import choreo.auto.AutoChooser;
+import choreo.auto.AutoFactory;
 import edu.wpi.first.math.geometry.Rotation2d;
+import edu.wpi.first.wpilibj.Solenoid;
+import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
+import edu.wpi.first.wpilibj2.command.CommandScheduler;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.RobotModeTriggers;
@@ -19,6 +27,7 @@ import edu.wpi.first.wpilibj2.command.sysid.SysIdRoutine.Direction;
 import frc.robot.generated.TunerConstants;
 import frc.robot.questOdometry.QuestServer;
 import frc.robot.subsystems.CommandSwerveDrivetrain;
+import frc.robot.subsystems.Pneumatics;
 import frc.robot.subsystems.QuestTelemetry;
 import frc.robot.subsystems.Shooter;
 
@@ -40,16 +49,29 @@ public class RobotContainer {
 
     public final CommandSwerveDrivetrain drivetrain = TunerConstants.createDrivetrain();
 
-    private final Shooter shooter = new Shooter();
+    private final Shooter shooter = new Shooter(drivetrain);
+
+    private final double stickPow = 1;
+
+    /* Path follower */
+    private final SendableChooser<Command> autoChooser;
     
 
     // quest stuff
     private final QuestServer questServer = new QuestServer(drivetrain);
     private final QuestTelemetry questTem = new QuestTelemetry(questServer);
+
+    public Pneumatics pneumatics;
     
 
     public RobotContainer() {
+        autoChooser = AutoBuilder.buildAutoChooser("Tests");
+        SmartDashboard.putData("Auto Mode", autoChooser);
+
         configureBindings();
+
+        // Warmup PathPlanner to avoid Java pauses
+        CommandScheduler.getInstance().schedule(FollowPathCommand.warmupCommand());
     }
 
     private void configureBindings() {
@@ -58,8 +80,8 @@ public class RobotContainer {
         drivetrain.setDefaultCommand(
             // Drivetrain will execute this command periodically
             drivetrain.applyRequest(() ->
-                drive.withVelocityX(-joystick.getLeftY() * MaxSpeed) // Drive forward with negative Y (forward)
-                    .withVelocityY(-joystick.getLeftX() * MaxSpeed) // Drive left with negative X (left)
+                drive.withVelocityX(-Math.pow(joystick.getLeftY(),stickPow) * MaxSpeed) // Drive forward with negative Y (forward)
+                    .withVelocityY(-Math.pow(joystick.getLeftX(),stickPow) * MaxSpeed) // Drive left with negative X (left)
                     .withRotationalRate(-joystick.getRightX() * MaxAngularRate) // Drive counterclockwise with negative X (left)
             )
         );
@@ -78,12 +100,15 @@ public class RobotContainer {
         ));
         */
 
-        joystick.a().whileTrue(shooter.feedCommand(true));
-        joystick.a().whileFalse(shooter.feedCommand(false));
-        joystick.b().whileTrue(shooter.conveyorCommand(true));
-        joystick.b().whileFalse(shooter.conveyorCommand(false));
-        joystick.leftTrigger().whileTrue(shooter.shooterCommand(true));
-        joystick.leftTrigger().whileFalse(shooter.shooterCommand(false));
+        // joystick.a().whileTrue(shooter.feedCommand(true));
+        // joystick.a().whileFalse(shooter.feedCommand(false));
+        // joystick.b().whileTrue(shooter.conveyorCommand(true));
+        // joystick.b().whileFalse(shooter.conveyorCommand(false));
+        // joystick.leftTrigger().whileTrue(shooter.shooterCommand(true));
+        // joystick.leftTrigger().whileFalse(shooter.shooterCommand(false));
+
+        joystick.a().whileTrue(pneumatics.setSolenoid(true));
+        joystick.a().whileFalse(pneumatics.setSolenoid(false));
 
         // Run SysId routines when holding back/start and X/Y.
         // Note that each routine should be run exactly once in a single log.
@@ -95,25 +120,32 @@ public class RobotContainer {
         // Reset the field-centric heading on left bumper press.
         joystick.leftBumper().onTrue(drivetrain.runOnce(drivetrain::seedFieldCentric));
 
+        // auto stuff
+        joystick.rightTrigger().whileTrue(drivetrain.goToTestPose());
+
         drivetrain.registerTelemetry(logger::telemeterize);
     }
 
     public Command getAutonomousCommand() {
-        // Simple drive forward auton
-        final var idle = new SwerveRequest.Idle();
-        return Commands.sequence(
-            // Reset our field centric heading to match the robot
-            // facing away from our alliance station wall (0 deg).
-            drivetrain.runOnce(() -> drivetrain.seedFieldCentric(Rotation2d.kZero)),
-            // Then slowly drive forward (away from us) for 5 seconds.
-            drivetrain.applyRequest(() ->
-                drive.withVelocityX(0.5)
-                    .withVelocityY(0)
-                    .withRotationalRate(0)
-            )
-            .withTimeout(5.0),
-            // Finally idle for the rest of auton
-            drivetrain.applyRequest(() -> idle)
-        );
+        // // Simple drive forward auton
+        // final var idle = new SwerveRequest.Idle();
+        // return Commands.sequence(
+        //     // Reset our field centric heading to match the robot
+        //     // facing away from our alliance station wall (0 deg).
+        //     drivetrain.runOnce(() -> drivetrain.seedFieldCentric(Rotation2d.kZero)),
+        //     // Then slowly drive forward (away from us) for 5 seconds.
+        //     drivetrain.applyRequest(() ->
+        //         drive.withVelocityX(-0.5)
+        //             .withVelocityY(0)
+        //             .withRotationalRate(0)
+        //     )
+        //     .withTimeout(3.0),
+        //     // Finally idle for the rest of auton
+        //     drivetrain.applyRequest(() -> idle)
+        // );
+        return shooter.autoShooter();
+
+        //return autoChooser.getSelected();
+
     }
 }
